@@ -47,67 +47,21 @@ const int chipSelect = 10;
 // SD card file
 File dataFile;
 
+enum IRStates {
+  IR1_TRIGGERED,
+  IR2_TRIGGERED,
+  IR3_TRIGGERED,
+  IR4_TRIGGERED,
+  TRIAL_INACTIVE,
+  NUM_IR_STATES  // Optional: To keep track of the number of states
+};
+
+// Declare a variable to store the current IR state
+IRStates currentIRState = IR1_TRIGGERED;
+
 // Function for IR beam being triggered 
 volatile boolean trialInProgress = false;
 unsigned long trialStartTime = 0;
-
-// IR1 function
-void IRBreak() {
-  if (!trialInProgress) {
-    trialInProgress = true;
-    trialStartTime = millis();
-    Serial.println("Trial started.");
-    // Turn on both lights when IR1 is triggered
-    digitalWrite(LED_Left, HIGH);
-    digitalWrite(LED_Right, HIGH);
-  }
-}
-
-// IR2 function
-void IR2Break() {
-  if (trialInProgress) {
-    // Play a tone
-    tone(Speaker_Left, 1000, 1000);  // Adjust frequency and duration as needed
-    // Unlock the doors
-    digitalWrite(Doors, HIGH);
-  }
-}
-
-// IR3 function
-// Later adjust how timestamp is set
-void IR3Break() {
-  if (trialInProgress) {
-    // Add a timestamp to the SD card
-    dataFile = SD.open("trialData.txt", FILE_WRITE);
-    if (dataFile) {
-      dataFile.print("Timestamp IR3: ");
-      dataFile.print(millis() - trialStartTime); // convert milliseconds to seconds since the trial started
-      dataFile.println(" ms");
-      dataFile.close();
-    } else {
-      Serial.println("Error opening file for writing.");
-    }
-  }
-}
-
-void IR4Break() {
-  if (trialInProgress) {
-    // Add a timestamp to the SD card
-    dataFile = SD.open("trialData.txt", FILE_WRITE);
-    if (dataFile) {
-      dataFile.print("Timestamp IR4: ");
-      dataFile.print(millis() - trialStartTime); // convert milliseconds to seconds since the trial started
-      dataFile.println(" ms");
-      dataFile.close();
-    } else {
-      Serial.println("Error opening file for writing.");
-    }
-    // Lock the doors after IR4 is triggered
-    digitalWrite(Doors, LOW);
-    // End the trial
-    trialInProgress = false;
-  }
-}
 
 void setup() {
 
@@ -139,56 +93,110 @@ void setup() {
   pinMode(Licker_Left, OUTPUT);
   pinMode(Licker_Right, OUTPUT);
 
-  // Attach interrupt to IR1
-  // If IR1 goes from high to low then the interupt is triggered causing the trial to begin (same for the following IR beams!)
-  attachInterrupt(digitalPinToInterrupt(IR1), IRBreak, FALLING);
-
-  // Attach interrupts to IR2_Left and IR2_Right
-  attachInterrupt(digitalPinToInterrupt(IR2_Left), IR2Break, FALLING);
-  attachInterrupt(digitalPinToInterrupt(IR2_Right), IR2Break, FALLING);
-
-  // Attach interrupts to IR3_Left and IR3_Right
-  attachInterrupt(digitalPinToInterrupt(IR3_Left), IR3Break, FALLING);
-  attachInterrupt(digitalPinToInterrupt(IR3_Right), IR3Break, FALLING);
-
-  // Attach interrupts to IR4_Left and IR4_Right
-  attachInterrupt(digitalPinToInterrupt(IR4_Left), IR4Break, FALLING);
-  attachInterrupt(digitalPinToInterrupt(IR4_Right), IR4Break, FALLING);
+  // Set up speaker pins as outputs
+  pinMode(Speaker_Left, OUTPUT);
+  pinMode(Speaker_Right, OUTPUT);
 }
 
 
 
 void loop() {
+  // Check the current state of the trial
+  switch (currentIRState) {
+    case IR1_TRIGGERED:
+      // IR1 is triggered, start the trial
+      trialInProgress = true;
+      trialStartTime = millis();
+      Serial.println("Trial started.");
+        dataFile = SD.open("trialData.txt", FILE_WRITE);
+        if (dataFile) {
+          dataFile.print("Timestamp IR1: ");
+          dataFile.print(millis() - trialStartTime);
+          dataFile.println(" ms");
+          dataFile.close();
+        } else {
+          Serial.println("Error opening file for writing.");
+        }
 
-  if (trialInProgress) {
-    unsigned long elapsedTime = millis() - trialStartTime;
+      // Turn on both lights when IR1 is triggered
+      digitalWrite(LED_Left, HIGH);
+      digitalWrite(LED_Right, HIGH);
 
-    // Print elapsed time to Serial Monitor
-    Serial.print("Elapsed Time: ");
-    Serial.print(elapsedTime / 1000); // convert milliseconds to seconds
-    Serial.println(" seconds");
+      // Move to the next state
+      currentIRState = IR2_TRIGGERED;
+      break;
 
-    // Save elapsed time to SD card
-    dataFile = SD.open("trialData.txt", FILE_WRITE);
-    if (dataFile) {
-      dataFile.print("Elapsed Time: ");
-      dataFile.print(elapsedTime / 1000); // convert milliseconds to seconds
-      dataFile.println(" seconds");
-      dataFile.close();
-    } else {
-      Serial.println("Error opening file for writing.");
-    }
+    case IR2_TRIGGERED:
+      // Check the state of IR2_Left or IR2_Right
+      if ((digitalRead(IR2_Left) == LOW) && trialInProgress) {
+       // IR2_Left is triggered, play a tone and unlock the doors using Speaker_Left
+      tone(Speaker_Left, 1000, 1000);  // Adjust frequency and duration as needed
+      digitalWrite(Doors, HIGH);
 
-    trialInProgress = false; // Reset for the next trial
-    delay(5000); // Wait for 5 seconds before starting the next trial (adjust as needed)
+      // Move to the next state
+      currentIRState = IR3_TRIGGERED;
+      }
+      else if ((digitalRead(IR2_Right) == LOW) && trialInProgress) {
+      // IR2_Right is triggered, play a tone and unlock the doors using Speaker_Right
+      tone(Speaker_Right, 1000, 1000);  // Adjust frequency and duration as needed
+      digitalWrite(Doors, HIGH);
 
-    //Turn off LED once trial is completed
-    digitalWrite(LED_Left, LOW);
-    digitalWrite(LED_Right, LOW);
+      // Move to the next state
+      currentIRState = IR3_TRIGGERED;
+      }
+      break;
 
-    // Lock the doors after the trial is completed
-    digitalWrite(Doors, LOW);
+    case IR3_TRIGGERED:
+      // Check the state of IR3_Left or IR3_Right
+      if ((digitalRead(IR3_Left) == LOW || digitalRead(IR3_Right) == LOW) && trialInProgress) {
+        // IR3_Left or IR3_Right is triggered, add a timestamp to the SD card
+        dataFile = SD.open("trialData.txt", FILE_WRITE);
+        if (dataFile) {
+          dataFile.print("Timestamp IR3: ");
+          dataFile.print(millis() - trialStartTime);
+          dataFile.println(" ms");
+          dataFile.close();
+        } else {
+          Serial.println("Error opening file for writing.");
+        }
 
-    delay(5000); // Wait for 5 seconds before starting the next trial (adjust as needed)
+        // Move to the next state
+        currentIRState = IR4_TRIGGERED;
+      }
+      break;
+
+    case IR4_TRIGGERED:
+      // Check the state of IR4_Left or IR4_Right
+      if ((digitalRead(IR4_Left) == LOW || digitalRead(IR4_Right) == LOW) && trialInProgress) {
+        // IR4_Left or IR4_Right is triggered, add a timestamp to the SD card, lock the doors, and end the trial
+        dataFile = SD.open("trialData.txt", FILE_WRITE);
+        if (dataFile) {
+          dataFile.print("Timestamp IR4: ");
+          dataFile.print(millis() - trialStartTime);
+          dataFile.println(" ms");
+          dataFile.close();
+        } else {
+          Serial.println("Error opening file for writing.");
+        }
+        // Lock the doors after IR4 is triggered
+        digitalWrite(Doors, LOW);
+        // End the trial
+        trialInProgress = false;
+        // Reset the state for the next trial
+        currentIRState = TRIAL_INACTIVE;
+      }
+      break;
+
+    case TRIAL_INACTIVE:
+      // Check the state of IR1 to start a new trial
+      if (digitalRead(IR1) == LOW && !trialInProgress) {
+        currentIRState = IR1_TRIGGERED;
+      }
+      break;
+
+    default:
+      // Handle unexpected state
+      break;
   }
+
 }
