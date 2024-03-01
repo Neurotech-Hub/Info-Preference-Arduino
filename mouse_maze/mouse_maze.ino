@@ -1,14 +1,14 @@
 //Define Variables
 // Using Arduino Uno, total of 15 variables as well as SPI (Four pins)
-#include <SPI.h> 
+#include <SPI.h>
 #include <SD.h>
 
 // IR beam variables
-int IR1 = A0;   
-int IR2_Left = A1;   
-int IR2_Right = A2;   
-int IR3_Left = A3;   
-int IR3_Right = A4; 
+int IR1 = A0;
+int IR2_Left = A1;
+int IR2_Right = A2;
+int IR3_Left = A3;
+int IR3_Right = A4;
 int IR4_Left = A5;
 int IR4_Right = 2;
 
@@ -35,34 +35,27 @@ int Speaker_Right = 6;
  
  set up variables using the SD utility library functions:
  */
-Sd2Card card;
-SdVolume volume;
-SdFile root;
 const int chipSelect = 10;
 
 // SD card file
-File dataFile;
+// File dataFile;
 int sessionNumber = 1;
-int trialNumber = 1;
+int trialNumber = 0;
 int userDate = 0;
-void writeToSD(int trial, const char* key, const char* value, int userDate, int sessionNumber, unsigned long trialStartTime) {
-  char filename[13]; // 8 characters for name + 1 for dot + 3 for extension + 1 for null terminator
+char filename[13];  // 8 characters for name + 1 for dot + 3 for extension + 1 for null terminator
 
-  sprintf(filename, "%08d%02d.TXT", userDate, sessionNumber);
-
-  File dataFile = SD.open(filename, FILE_WRITE);
+void writeToSD(String key, String value) {
+  File dataFile = SD.open(filename, FILE_WRITE);  // !! create if doesn't exist, then append !!
+  int timestamp = millis() - sessionStartTime;
   if (dataFile) {
-    unsigned long elapsedTime = millis() - trialStartTime;
-
-    dataFile.print(trial);
+    dataFile.print(trialNumber);
     dataFile.print(",");
-    dataFile.print("IR beam,");
     dataFile.print(key);
     dataFile.print(",");
-    dataFile.print("Timestamp,");
-    dataFile.print(elapsedTime);
+    dataFile.print(value);
+    dataFile.print(",");
+    dataFile.print(timestamp);
     dataFile.println();
-
     dataFile.close();
   } else {
     Serial.println("Error opening data file for writing.");
@@ -79,8 +72,9 @@ enum IRStates {
 
 // Declare a variable to store the current IR state
 IRStates currentIRState = IR1_CHECK;
- 
+
 unsigned long trialStartTime = 0;
+unsigned long sessionStartTime = 0;
 
 void setup() {
 
@@ -88,12 +82,12 @@ void setup() {
   Serial.begin(9600);
   if (!SD.begin(chipSelect)) {
     Serial.println("SD card initialization failed. Check your connections.");
-    while (1);  // halt if SD card initialization failed
+    while (1)
+      ;  // halt if SD card initialization failed
   }
 
   Serial.println("SD card initialization successful.");
 
-  
   // Set up IR beam pins as inputs
   pinMode(IR1, INPUT);
   pinMode(IR2_Left, INPUT);
@@ -117,11 +111,10 @@ void setup() {
   pinMode(Speaker_Right, OUTPUT);
 
   Serial.println("Enter date (YYYYMMDD): ");
-  while (Serial.available() == 0);
+  while (Serial.available() == 0)
+    ;
   userDate = Serial.parseInt();
 }
-
-
 
 void loop() {
 
@@ -130,9 +123,22 @@ void loop() {
     case IR1_CHECK:
       // Check state of IR1
       if (digitalRead(IR1) == LOW) {
+        trialNumber++;
+        if (trialNumber == 1) {
+          // write first 2 lines
+          writeToSD(trialNumber, "date", String(userDate));
+          // 001,date,20240301 (YYYYMMDD)
+          // 001,time,07:25:13.1285 (HH:MM:SS.mmmm) // do later with RTC
+          sessionStartTime = millis();  // make absolute datetime in future
+        }
+        // Check if 100 trials are completed for a session
+        if (trialNumber > 100) {
+          currentIRState = TRIAL_INACTIVE;
+        }
+
         trialStartTime = millis();
         Serial.println("Trial started.");
-        writeToSD(trialNumber, "IR1", "", userDate, sessionNumber, trialStartTime); // Log data for IR1
+        writeToSD(trialNumber, "IR1", "");  // Log data for IR1
         // Turn on both lights when IR1 is triggered
         digitalWrite(LED_Left, HIGH);
         digitalWrite(LED_Right, HIGH);
@@ -155,6 +161,7 @@ void loop() {
       if (digitalRead(IR2_Right) == LOW) {
         // IR2_Right is triggered, play a tone and unlock the doors using Speaker_Right
         tone(Speaker_Right, 1000, 1000);  // Adjust frequency and duration as needed
+        // !! write tone freq to SD card !!
         digitalWrite(Doors, HIGH);
         // Log data for IR2_Right
         writeToSD(trialNumber, "IR2_Right", "", userDate, sessionNumber, trialStartTime);
@@ -182,33 +189,25 @@ void loop() {
         digitalWrite(Doors, LOW);
         // End the trial
         // Reset the state for the next trial
-        currentIRState = TRIAL_INACTIVE;
-      }
-      break;
-
-    case TRIAL_INACTIVE:
-      // Check the state of IR1 to start a new trial
-      if (digitalRead(IR1) == LOW) {
         currentIRState = IR1_CHECK;
       }
       break;
 
+    case TRIAL_INACTIVE:
+      // AWAIT USER INPUT
+      Serial.println("Session complete. Starting a new session.");
+      while (1) {
+        // wait for something/button/user input/etc.
+      }
+      // Increment the session number
+      sessionNumber++;
+      sprintf(filename, "%08d%02d.TXT", userDate, sessionNumber);
+      // Reset the trial number for the new session
+      trialNumber = 0;
+      currentIRState = IR1_CHECK;
+      break;
 
-     default: 
-      //default is not necessary but left here in case none of the cases match the switch values
-      // Handle unexpected state
+    default:
       break;
   }
-
-  trialNumber++;
-
-  // Check if 100 trials are completed for a session
-  if (trialNumber > 100) {
-    Serial.println("Session complete. Starting a new session.");
-    // Increment the session number
-    sessionNumber++;
-    // Reset the trial number for the new session
-    trialNumber = 1;
-  }
-
 }
