@@ -28,6 +28,13 @@ int Licker_Right = 9;
 int Speaker_Left = 5;
 int Speaker_Right = 6;
 
+// Define tones
+#define A 7000
+#define B 10000
+#define C 8000
+#define D 12000
+#define TONE_DURATION 5000
+
 /* SPI: Following pins are used by the SPI
  SDO - pin 11 
  SDI - pin 12 
@@ -43,6 +50,9 @@ int sessionNumber = 1;
 int trialNumber = 0;
 int userDate = 0;
 char filename[13];  // 8 characters for name + 1 for dot + 3 for extension + 1 for null terminator
+
+unsigned long trialStartTime = 0;
+unsigned long sessionStartTime = 0;
 
 void writeToSD(String key, String value) {
   File dataFile = SD.open(filename, FILE_WRITE);  // !! create if doesn't exist, then append !!
@@ -73,13 +83,11 @@ enum IRStates {
 // Declare a variable to store the current IR state
 IRStates currentIRState = IR1_CHECK;
 
-unsigned long trialStartTime = 0;
-unsigned long sessionStartTime = 0;
-
 void setup() {
 
   // Set up SPI for SD card
   Serial.begin(9600);
+  Serial.println("Setup started");
   if (!SD.begin(chipSelect)) {
     Serial.println("SD card initialization failed. Check your connections.");
     while (1)
@@ -89,13 +97,13 @@ void setup() {
   Serial.println("SD card initialization successful.");
 
   // Set up IR beam pins as inputs
-  pinMode(IR1, INPUT);
-  pinMode(IR2_Left, INPUT);
-  pinMode(IR2_Right, INPUT);
-  pinMode(IR3_Left, INPUT);
-  pinMode(IR3_Right, INPUT);
-  pinMode(IR4_Left, INPUT);
-  pinMode(IR4_Right, INPUT);
+  pinMode(IR1, INPUT_PULLUP);
+  pinMode(IR2_Left, INPUT_PULLUP);
+  pinMode(IR2_Right, INPUT_PULLUP);
+  pinMode(IR3_Left, INPUT_PULLUP);
+  pinMode(IR3_Right, INPUT_PULLUP);
+  pinMode(IR4_Left, INPUT_PULLUP);
+  pinMode(IR4_Right, INPUT_PULLUP);
 
   // Set up light pins as outputs
   pinMode(LED_Left, OUTPUT);
@@ -126,7 +134,7 @@ void loop() {
         trialNumber++;
         if (trialNumber == 1) {
           // write first 2 lines
-          writeToSD(trialNumber, "date", String(userDate));
+          writeToSD("date", String(userDate));
           // 001,date,20240301 (YYYYMMDD)
           // 001,time,07:25:13.1285 (HH:MM:SS.mmmm) // do later with RTC
           sessionStartTime = millis();  // make absolute datetime in future
@@ -138,7 +146,7 @@ void loop() {
 
         trialStartTime = millis();
         Serial.println("Trial started.");
-        writeToSD(trialNumber, "IR1", "");  // Log data for IR1
+        writeToSD("IR1", "");  // Log data for IR1
         // Turn on both lights when IR1 is triggered
         digitalWrite(LED_Left, HIGH);
         digitalWrite(LED_Right, HIGH);
@@ -154,7 +162,7 @@ void loop() {
         tone(Speaker_Left, 1000, 1000);  // Adjust frequency and duration as needed
         digitalWrite(Doors, HIGH);
         // Log data for IR2_Left
-        writeToSD(trialNumber, "IR2_Left", "", userDate, sessionNumber, trialStartTime);
+        writeToSD("IR2_Left", "");
         // Move to the next state
         currentIRState = IR3_CHECK;
       }
@@ -164,7 +172,7 @@ void loop() {
         // !! write tone freq to SD card !!
         digitalWrite(Doors, HIGH);
         // Log data for IR2_Right
-        writeToSD(trialNumber, "IR2_Right", "", userDate, sessionNumber, trialStartTime);
+        writeToSD("IR2_Right", "");
         // Move to the next state
         currentIRState = IR3_CHECK;
       }
@@ -174,7 +182,7 @@ void loop() {
       // Check the state of IR3_Left or IR3_Right
       if (digitalRead(IR3_Left) == LOW || digitalRead(IR3_Right) == LOW) {
         // IR3_Left or IR3_Right is triggered, add a timestamp to the SD card
-        writeToSD(trialNumber, (digitalRead(IR3_Left) == LOW) ? "IR3_Left" : "IR3_Right", "", userDate, sessionNumber, trialStartTime);
+        writeToSD((digitalRead(IR3_Left) == LOW) ? "IR3_Left" : "IR3_Right", "");
         // Move to the next state
         currentIRState = IR4_CHECK;
       }
@@ -184,7 +192,7 @@ void loop() {
       // Check the state of IR4_Left or IR4_Right
       if (digitalRead(IR4_Left) == LOW || digitalRead(IR4_Right) == LOW) {
         // IR4_Left or IR4_Right is triggered, add a timestamp to the SD card, lock the doors, and end the trial
-        writeToSD(trialNumber, (digitalRead(IR4_Left) == LOW) ? "IR4_Left" : "IR4_Right", "", userDate, sessionNumber, trialStartTime);
+        writeToSD((digitalRead(IR4_Left) == LOW) ? "IR4_Left" : "IR4_Right", "");
         // Lock the doors after IR4 is triggered
         digitalWrite(Doors, LOW);
         // End the trial
