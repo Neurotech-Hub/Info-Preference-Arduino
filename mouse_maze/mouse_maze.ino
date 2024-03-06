@@ -63,7 +63,6 @@ int Speaker_Right = 6;
  SDO - pin 11 
  SDI - pin 12 
  CLK - pin 13
- 
  set up variables using the SD utility library functions:
  */
 const int chipSelect = 10;
@@ -202,20 +201,49 @@ void loop() {
 
     case IR2_CHECK:
       if (digitalRead(IR2_Left) == LOW) {
-        tone(Speaker_Left, A, TONE_DURATION);  // Adjust frequency and duration as needed
+        writeToSD("IR2_Left", "");  // Log data for IR2_LEFT
+        // Generate a random number between 0 and 3
+        int randomNumber = random(4);
+        // Choose tone based on the random number
+        if (randomNumber == 3) {
+          tone(Speaker_Left, A, TONE_DURATION);  // Play tone A
+        } else {
+          tone(Speaker_Left, B, TONE_DURATION);  // Play tone B
+        }
+        unsigned long toneStartTime = millis();
+        while (millis() - toneStartTime < TONE_DURATION) {
+          // Allow the tone to play for TONE_DURATION (5 seconds)
+        }
+        if (randomNumber == 3 && millis() - toneStartTime >= TONE_DURATION) {
+          pinMode(Licker_Left, HIGH);  // Activate Licker_Left after 5 seconds of tone A
+        }
         digitalWrite(Doors, HIGH);
-        writeToSD("Tone Frequency", String(A));  // !! update
-        writeToSD("Tone Duration", String(TONE_DURATION));
-        Serial.println("IR2_Left broken");
+        Serial.print("IR2_Left broken, Played Tone: ");
+        Serial.println(randomNumber == 3 ? "A" : "B");
         currentIRState = IR3_CHECK;
       }
       if (digitalRead(IR2_Right) == LOW) {
-        tone(Speaker_Right, B, TONE_DURATION);  // Adjust frequency and duration as needed
+        writeToSD("IR2_Right", "");  // Log data for IR2_RIGHT
+        // Generate a random number between 0 and 1
+        int randomNumber = random(2);
+        // Choose tone based on the random number
+        if (randomNumber == 1) {
+          tone(Speaker_Right, C, TONE_DURATION);  // Play tone C
+        } else {
+          tone(Speaker_Right, D, TONE_DURATION);  // Play tone D
+        }
+        unsigned long toneStartTime = millis();
+        while (millis() - toneStartTime < TONE_DURATION) {
+          // Allow the tone to play for TONE_DURATION (5 seconds)
+        }
+        int randomNumber2 = random(4);
+        // Deliver reward based on random number
+        if (randomNumber2 == 3) {
+          pinMode(Licker_Right, HIGH);  // Activate Licker_Right if the random number is 3
+        }
         digitalWrite(Doors, HIGH);
-        writeToSD("IR2_Right", "");
-        writeToSD("Tone Frequency", String(B));  // !! update
-        writeToSD("Tone Duration", String(TONE_DURATION));
-        Serial.println("IR2_Right broken");
+        Serial.print("IR2_Right broken, Played Tone: ");
+        Serial.println(randomNumber == 1 ? "C" : "D");
         currentIRState = IR3_CHECK;
       }
       break;
@@ -227,7 +255,7 @@ void loop() {
         currentIRState = IR4_CHECK;
       }
       if (digitalRead(IR3_Right) == LOW) {
-        writeToSD("IR3_Left", "");
+        writeToSD("IR3_Right", "");
         Serial.println("IR3_Right broken");
         currentIRState = IR4_CHECK;
       }
@@ -240,7 +268,7 @@ void loop() {
         currentIRState = IR1_CHECK;
       }
       if (digitalRead(IR4_Right) == LOW) {
-        writeToSD("IR4_Left", "");
+        writeToSD("IR4_Right", "");
         Serial.println("IR4_Right broken");
         currentIRState = IR1_CHECK;
       }
