@@ -1,5 +1,6 @@
 //Define Variables
 // Using Arduino Uno, total of 15 variables as well as SPI (Four pins)
+//add tone freq in statement
 #include <SPI.h>
 #include <SD.h>
 #include "Arduino_LED_Matrix.h"
@@ -158,7 +159,15 @@ void writeToSD(String key, String value, bool createNewFile = false) {
     dataFile.print(timestamp);
     dataFile.println();
     dataFile.close();
-    Serial.println("Wrote to " + filename);
+    // Print statement for debugging in Serial monitor
+    Serial.print("\n\nWrote to ");
+    Serial.print(filename);
+    Serial.print(": ");
+    Serial.print(key);
+    Serial.print(",");
+    Serial.print(value);
+    Serial.print(",");
+    Serial.print(timestamp);
   } else {
     Serial.println("SD card removed! Replace and restart.");
     while (1) {
@@ -176,7 +185,7 @@ void loop() {
       // Check state of IR1
       if (digitalRead(IR1) == LOW) {
         trialNumber++;
-        Serial.println("Trial: " + String(trialNumber));
+        Serial.println("\nTrial: " + String(trialNumber) + "\nSession: " + String(sessionNumber));
         if (trialNumber == 1) {
           sessionStartTime = millis();
           String currentDate = getDate();
@@ -186,16 +195,16 @@ void loop() {
           writeToSD("time", getTime());
         }
 
-        if (trialNumber > 100) {
+        if (trialNumber > 2) {
           currentIRState = TRIAL_INACTIVE;
-        }
+        } else {
 
-        trialStartTime = millis();
-        writeToSD("IR1", "");  // Log data for IR1
-        digitalWrite(LED_Left, HIGH);
-        digitalWrite(LED_Right, HIGH);
-        Serial.println("IR1 broken");
-        currentIRState = IR2_CHECK;
+          trialStartTime = millis();
+          writeToSD("IR1", "");  // Log data for IR1
+          digitalWrite(LED_Left, HIGH);
+          digitalWrite(LED_Right, HIGH);
+          currentIRState = IR2_CHECK;
+        }
       }
       break;
 
@@ -210,16 +219,17 @@ void loop() {
         } else {
           tone(Speaker_Left, B, TONE_DURATION);  // Play tone B
         }
+        writeToSD("Tone " + (randomNumber == 3 ? String("A, 7000 Hz,") : String("B, 10000 Hz,") + " Left Speaker"), "");
         unsigned long toneStartTime = millis();
         while (millis() - toneStartTime < TONE_DURATION) {
           // Allow the tone to play for TONE_DURATION (5 seconds)
         }
         if (randomNumber == 3 && millis() - toneStartTime >= TONE_DURATION) {
           pinMode(Licker_Left, HIGH);  // Activate Licker_Left after 5 seconds of tone A
+          writeToSD("Licker_Left", "");
         }
         digitalWrite(Doors, HIGH);
-        Serial.print("IR2_Left broken, Played Tone: ");
-        Serial.println(randomNumber == 3 ? "A" : "B");
+        writeToSD("Doors", "");
         currentIRState = IR3_CHECK;
       }
       if (digitalRead(IR2_Right) == LOW) {
@@ -232,6 +242,7 @@ void loop() {
         } else {
           tone(Speaker_Right, D, TONE_DURATION);  // Play tone D
         }
+        writeToSD("Tone " + (randomNumber == 1 ? String("C, 8000 Hz,") : String("D, 12000 Hz,") + " Right Speker"), "");
         unsigned long toneStartTime = millis();
         while (millis() - toneStartTime < TONE_DURATION) {
           // Allow the tone to play for TONE_DURATION (5 seconds)
@@ -240,10 +251,10 @@ void loop() {
         // Deliver reward based on random number
         if (randomNumber2 == 3) {
           pinMode(Licker_Right, HIGH);  // Activate Licker_Right if the random number is 3
+          writeToSD("Licker_Right", "");
         }
         digitalWrite(Doors, HIGH);
-        Serial.print("IR2_Right broken, Played Tone: ");
-        Serial.println(randomNumber == 1 ? "C" : "D");
+        writeToSD("Doors", "");
         currentIRState = IR3_CHECK;
       }
       break;
@@ -251,12 +262,10 @@ void loop() {
     case IR3_CHECK:
       if (digitalRead(IR3_Left) == LOW) {
         writeToSD("IR3_Left", "");
-        Serial.println("IR3_Left broken");
         currentIRState = IR4_CHECK;
       }
       if (digitalRead(IR3_Right) == LOW) {
         writeToSD("IR3_Right", "");
-        Serial.println("IR3_Right broken");
         currentIRState = IR4_CHECK;
       }
       break;
@@ -264,25 +273,28 @@ void loop() {
     case IR4_CHECK:
       if (digitalRead(IR4_Left) == LOW) {
         writeToSD("IR4_Left", "");
-        Serial.println("IR4_Left broken");
         currentIRState = IR1_CHECK;
       }
       if (digitalRead(IR4_Right) == LOW) {
         writeToSD("IR4_Right", "");
-        Serial.println("IR4_Right broken");
         currentIRState = IR1_CHECK;
       }
       break;
 
     case TRIAL_INACTIVE:
       Serial.println("Session complete. Starting a new session.");
-      while (1) {
+      matrix.loadFrame(frame_full);
+      delay(500);
+      matrix.loadFrame(frame_heart);
+      delay(500);
+      delay(2000);
+      /*while (1) {
         // wait for something/button/user input/etc.
         matrix.loadFrame(frame_full);
         delay(500);
         matrix.loadFrame(frame_heart);
         delay(500);
-      }
+      }*/
       sessionNumber++;
       trialNumber = 0;  // Reset the trial number for the new session
       currentIRState = IR1_CHECK;
