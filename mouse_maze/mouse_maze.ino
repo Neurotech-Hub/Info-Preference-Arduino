@@ -507,4 +507,3 @@ void compareStringsByteByByte(const String& storedCompileID, const char* current
     Serial.println("Strings do not match.");
   }
 }
-
