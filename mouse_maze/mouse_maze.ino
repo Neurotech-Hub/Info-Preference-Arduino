@@ -7,6 +7,10 @@
 #include <Wire.h>
 #include <DS3231.h>
 
+#define MAX_TRIALS_IN_SESSION 2
+const char* currentCompileID = __DATE__ " " __TIME__;  // Unique ID for each compilation
+const char* compilationFilename = "COMPILE.TXT";
+
 // RTC
 DS3231 rtc;
 
@@ -53,12 +57,15 @@ int Licker_Right = 9;
 int Speaker_Left = 5;
 int Speaker_Right = 6;
 
+bool finishIR3;  // special case for tone/IR3 logging
+
 // Define tones
 #define A 7000
 #define B 10000
 #define C 8000
 #define D 12000
 #define TONE_DURATION 5000
+unsigned long toneStartTime = 0;
 
 /* SPI: Following pins are used by the SPI
  SDO - pin 11 
@@ -115,22 +122,16 @@ void setup() {
   matrix.begin();
   matrix.loadFrame(frame_heart);
 
-  Wire.begin();  // I2C RTC
-  delay(500);
-  rtc.setClockMode(false);  // set to 24h
-
   // Set up SPI for SD card
   Serial.begin(115200);
+  delay(2000);  // startup delay
   long startTime = millis();
-  while ((millis() - startTime) < 5000) {
+  while (millis() - startTime < 5000) {
     if (Serial) {
       Serial.println("\n\n*** Hello, info preference test! ***");
-      updateRTC();
-      Serial.println("Updated RTC.");
       break;  // Exit the loop if a serial connection is established
     }
   }
-  showTime();
 
   if (!SD.begin(chipSelect)) {
     Serial.println("SD card initialization failed. Check your connections.");
@@ -138,6 +139,15 @@ void setup() {
       ;  // halt if SD card initialization failed
   }
   Serial.println("SD card initialization successful.");
+
+  Wire.begin();  // I2C RTC
+  // Wire.setClock(25000); // slow it down
+  delay(500);
+  if(checkAndUpdateCompileID()) {
+    updateRTC();
+    rtc.setClockMode(false);  // set to 24h
+  }
+  showTime();
 
   matrix.loadFrame(frame_empty);
   Serial.println("Entering task...");
@@ -160,14 +170,15 @@ void writeToSD(String key, String value, bool createNewFile = false) {
     dataFile.println();
     dataFile.close();
     // Print statement for debugging in Serial monitor
-    Serial.print("\n\nWrote to ");
+    showTime();
+    Serial.print("Saved ");
     Serial.print(filename);
     Serial.print(": ");
     Serial.print(key);
     Serial.print(",");
     Serial.print(value);
     Serial.print(",");
-    Serial.print(timestamp);
+    Serial.println(timestamp);
   } else {
     Serial.println("SD card removed! Replace and restart.");
     while (1) {
@@ -185,7 +196,7 @@ void loop() {
       // Check state of IR1
       if (digitalRead(IR1) == LOW) {
         trialNumber++;
-        Serial.println("\nTrial: " + String(trialNumber) + "\nSession: " + String(sessionNumber));
+        Serial.println("Trial: " + String(trialNumber) + ", Session: " + String(sessionNumber));
         if (trialNumber == 1) {
           sessionStartTime = millis();
           String currentDate = getDate();
@@ -195,7 +206,7 @@ void loop() {
           writeToSD("time", getTime());
         }
 
-        if (trialNumber > 2) {
+        if (trialNumber > MAX_TRIALS_IN_SESSION) {
           currentIRState = TRIAL_INACTIVE;
         } else {
 
@@ -210,16 +221,15 @@ void loop() {
 
     case IR2_CHECK:
       if (digitalRead(IR2_Left) == LOW) {
-        writeToSD("IR2_Left", "");  // Log data for IR2_LEFT
-        // Generate a random number between 0 and 3
-        int randomNumber = random(4);
-        // Choose tone based on the random number
+        writeToSD("IR2_Left", "");
+        int randomNumber = random(4);  // random int 0-3
         if (randomNumber == 3) {
           tone(Speaker_Left, A, TONE_DURATION);  // Play tone A
+          writeToSD("Tone_Left", String(A));
         } else {
           tone(Speaker_Left, B, TONE_DURATION);  // Play tone B
+          writeToSD("Tone_Left", String(B));
         }
-        writeToSD("Tone " + (randomNumber == 3 ? String("A, 7000 Hz,") : String("B, 10000 Hz,") + " Left Speaker"), "");
         unsigned long toneStartTime = millis();
         while (millis() - toneStartTime < TONE_DURATION) {
           // Allow the tone to play for TONE_DURATION (5 seconds)
@@ -228,8 +238,8 @@ void loop() {
           pinMode(Licker_Left, HIGH);  // Activate Licker_Left after 5 seconds of tone A
           writeToSD("Licker_Left", "");
         }
-        digitalWrite(Doors, HIGH);
-        writeToSD("Doors", "");
+        toneStartTime = millis();
+        finishIR3 = false;  // reset
         currentIRState = IR3_CHECK;
       }
       if (digitalRead(IR2_Right) == LOW) {
@@ -239,14 +249,31 @@ void loop() {
         // Choose tone based on the random number
         if (randomNumber == 1) {
           tone(Speaker_Right, C, TONE_DURATION);  // Play tone C
+          writeToSD("Tone_Left", String(C));
         } else {
           tone(Speaker_Right, D, TONE_DURATION);  // Play tone D
+          writeToSD("Tone_Left", String(D));
         }
-        writeToSD("Tone " + (randomNumber == 1 ? String("C, 8000 Hz,") : String("D, 12000 Hz,") + " Right Speker"), "");
-        unsigned long toneStartTime = millis();
-        while (millis() - toneStartTime < TONE_DURATION) {
-          // Allow the tone to play for TONE_DURATION (5 seconds)
-        }
+        toneStartTime = millis();
+        finishIR3 = false;  // reset
+        currentIRState = IR3_CHECK;
+      }
+      break;
+
+    case IR3_CHECK:
+      // time between IR2-3 is critical, no blocking
+      // !finishIR3 && ensures IR3 is only logged once
+      if (!finishIR3 && digitalRead(IR3_Left) == LOW) {
+        writeToSD("IR3_Left", "");
+        finishIR3 = true;
+      }
+      if (!finishIR3 && digitalRead(IR3_Right) == LOW) {
+        writeToSD("IR3_Right", "");
+        finishIR3 = true;
+      }
+
+      // if IR was triggered AND tone has played thru
+      if (finishIR3 && (millis() - toneStartTime >= TONE_DURATION)) {
         int randomNumber2 = random(4);
         // Deliver reward based on random number
         if (randomNumber2 == 3) {
@@ -254,19 +281,8 @@ void loop() {
           writeToSD("Licker_Right", "");
         }
         digitalWrite(Doors, HIGH);
-        writeToSD("Doors", "");
-        currentIRState = IR3_CHECK;
-      }
-      break;
-
-    case IR3_CHECK:
-      if (digitalRead(IR3_Left) == LOW) {
-        writeToSD("IR3_Left", "");
-        currentIRState = IR4_CHECK;
-      }
-      if (digitalRead(IR3_Right) == LOW) {
-        writeToSD("IR3_Right", "");
-        currentIRState = IR4_CHECK;
+        writeToSD("Doors Open", "");
+        currentIRState = IR4_CHECK;  // progress to next state here
       }
       break;
 
@@ -287,7 +303,6 @@ void loop() {
       delay(500);
       matrix.loadFrame(frame_heart);
       delay(500);
-      delay(2000);
       /*while (1) {
         // wait for something/button/user input/etc.
         matrix.loadFrame(frame_full);
@@ -340,9 +355,21 @@ void updateRTC() {
 
 String getTime() {
   bool h12, PM_time;
-  byte second = rtc.getSecond();
-  byte minute = rtc.getMinute();
-  byte hour = rtc.getHour(h12, PM_time);
+  byte second, minute, hour;
+  unsigned long startMillis = millis();
+  unsigned long timeout = 5000;  // 5 seconds timeout
+
+  // Try to get valid time within timeout
+  do {
+    second = rtc.getSecond();
+    minute = rtc.getMinute();
+    hour = rtc.getHour(h12, PM_time);
+  } while ((hour > 23 || minute > 59 || second > 59) && (millis() - startMillis < timeout));
+
+  // Check if valid time was obtained
+  if (hour > 23 || minute > 59 || second > 59) {
+    return "INVALID";
+  }
 
   // Create a String in the format "HH:MM:SS"
   String timeString = (hour < 10 ? "0" : "") + String(hour) + ":" + (minute < 10 ? "0" : "") + String(minute) + ":" + (second < 10 ? "0" : "") + String(second);
@@ -351,12 +378,24 @@ String getTime() {
 
 String getDate() {
   bool h12, PM_time, Century;
-  byte second = rtc.getSecond();
-  byte minute = rtc.getMinute();
-  byte hour = rtc.getHour(h12, PM_time);
-  byte day = rtc.getDate();
-  byte month = rtc.getMonth(Century);
-  byte year = rtc.getYear();
+  byte year = 255, month = 255, day = 255;
+  unsigned long startMillis = millis();
+  unsigned long timeout = 5000;  // 5 seconds timeout
+
+  // Try to mitigate errors with I2C and validate date within timeout
+  while ((year > 28 || year < 24 || month > 12 || month < 1 || day > 31 || day < 1) && (millis() - startMillis < timeout)) {
+    byte second = rtc.getSecond();
+    byte minute = rtc.getMinute();
+    byte hour = rtc.getHour(h12, PM_time);
+    day = rtc.getDate();
+    month = rtc.getMonth(Century);
+    year = rtc.getYear();
+  }
+
+  // Check if valid date was obtained
+  if (year > 28 || year < 24 || month > 12 || month < 1 || day > 31 || day < 1) {
+    return "INVALID";
+  }
 
   // Create a String in the format "YYMMDD"
   String dateString = String(year) + (month < 10 ? "0" : "") + String(month) + (day < 10 ? "0" : "") + String(day);
@@ -365,26 +404,107 @@ String getDate() {
 
 void showTime() {
   bool h12, PM_time, Century;
-  byte second = rtc.getSecond();
-  byte minute = rtc.getMinute();
-  byte hour = rtc.getHour(h12, PM_time);
-  byte day = rtc.getDate();
-  byte month = rtc.getMonth(Century);
-  byte year = rtc.getYear();
+  byte second, minute, hour, day, month, year;
+  unsigned long startMillis = millis();
+  unsigned long timeout = 5000;  // 5 seconds timeout
 
+  // Try to get valid date and time within timeout
+  do {
+    second = rtc.getSecond();
+    minute = rtc.getMinute();
+    hour = rtc.getHour(h12, PM_time);
+    day = rtc.getDate();
+    month = rtc.getMonth(Century);
+    year = rtc.getYear();
+  } while ((year > 28 || year < 24 || month > 12 || month < 1 || day > 31 || day < 1 || hour > 23 || minute > 59 || second > 59) && (millis() - startMillis < timeout));
+
+  // Check if valid date and time were obtained
+  if (year > 28 || year < 24 || month > 12 || month < 1 || day > 31 || day < 1 || hour > 23 || minute > 59 || second > 59) {
+    Serial.println("Invalid Datetime");
+    return;
+  }
+
+  // Display the date and time in the format "YYYY/MM/DD HH:MM:SS"
   Serial.print(year + 2000, DEC);
   Serial.print('/');
+  Serial.print(month < 10 ? "0" : "");
   Serial.print(month, DEC);
   Serial.print('/');
+  Serial.print(day < 10 ? "0" : "");
   Serial.print(day, DEC);
   Serial.print(" ");
-  Serial.print(hour < 10 ? "0" : "");  // Add a leading zero if the hour is less than 10
+  Serial.print(hour < 10 ? "0" : "");
   Serial.print(hour, DEC);
   Serial.print(':');
-  Serial.print(minute < 10 ? "0" : "");  // Add a leading zero if the minute is less than 10
+  Serial.print(minute < 10 ? "0" : "");
   Serial.print(minute, DEC);
   Serial.print(':');
-  Serial.print(second < 10 ? "0" : "");  // Add a leading zero if the second is less than 10
+  Serial.print(second < 10 ? "0" : "");
   Serial.print(second, DEC);
   Serial.println();
 }
+
+bool checkAndUpdateCompileID() {
+  bool updateTime = false;
+  // Read the stored compile ID from the file
+  String storedCompileID;
+  File file = SD.open(compilationFilename, FILE_READ);
+  if (file) {
+    storedCompileID = file.readStringUntil('\n');
+    storedCompileID.trim(); // end char
+    Serial.print("Stored compilation: ");
+    Serial.println(storedCompileID);
+    file.close();
+  }
+
+  // compareStringsByteByByte(storedCompileID, currentCompileID);
+
+  // Compare the stored ID with the current compile ID
+  if (storedCompileID != currentCompileID) {
+    // IDs don't match, so it's a new compilation
+    Serial.print("New compilation (saving): ");
+    Serial.println(currentCompileID);
+    updateTime = true;
+
+    // Update the file with the current compile ID
+    file = SD.open(compilationFilename, O_WRITE | O_CREAT | O_TRUNC);
+    if (file) {
+      file.println(currentCompileID);
+      file.close();
+    }
+  } else {
+    Serial.println("No new compilation, file not updated.");
+  }
+}
+
+void compareStringsByteByByte(const String& storedCompileID, const char* currentCompileID) {
+  Serial.println("Comparing strings byte by byte:");
+  int i = 0;
+  bool stringsMatch = true;
+  while (currentCompileID[i] != '\0' || i < storedCompileID.length()) {
+    char storedChar = i < storedCompileID.length() ? storedCompileID[i] : '\0';
+    char currentChar = currentCompileID[i];
+    Serial.print("Byte ");
+    Serial.print(i);
+    Serial.print(": Stored = ");
+    Serial.print((int)storedChar);
+    Serial.print(" (");
+    Serial.print(storedChar);
+    Serial.print("), Current = ");
+    Serial.print((int)currentChar);
+    Serial.print(" (");
+    Serial.print(currentChar);
+    Serial.println(")");
+    if (storedChar != currentChar) {
+      stringsMatch = false;
+      Serial.println(" -> Mismatch detected!");
+    }
+    i++;
+  }
+  if (stringsMatch) {
+    Serial.println("Strings match!");
+  } else {
+    Serial.println("Strings do not match.");
+  }
+}
+
