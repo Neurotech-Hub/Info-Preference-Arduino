@@ -170,7 +170,7 @@ void writeToSD(String key, String value, bool createNewFile = false) {
     dataFile.println();
     dataFile.close();
     // Print statement for debugging in Serial monitor
-    showTime();
+    showTime(); // !! DEBUGGING ONLY
     Serial.print("Saved ");
     Serial.print(filename);
     Serial.print(": ");
