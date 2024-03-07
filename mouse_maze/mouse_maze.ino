@@ -1,6 +1,4 @@
-//Define Variables
-// Using Arduino Uno, total of 15 variables as well as SPI (Four pins)
-//add tone freq in statement
+// Arduino Uno, total of 15 variables as well as SPI (Four pins)
 #include <SPI.h>
 #include <SD.h>
 #include "Arduino_LED_Matrix.h"
@@ -44,7 +42,6 @@ int LED_Right = 4;
 // Solenoid variables
 // Lickers use I2C
 // Made both doors the same pin since we were out of pins
-// Transmitters are always powered
 int Doors = 7;
 int Licker_Left = 8;
 int Licker_Right = 9;
@@ -64,12 +61,10 @@ int Speaker_Right = 6;
  SDO - pin 11 
  SDI - pin 12 
  CLK - pin 13
- set up variables using the SD utility library functions:
  */
 const int chipSelect = 10;
 
 // SD card file
-// File dataFile;
 int sessionNumber = 1;
 int trialNumber = 0;
 String filename;  // 8 characters for name + 1 for dot + 3 for extension + 1 for null terminator
@@ -89,7 +84,6 @@ enum IRStates {
 IRStates currentIRState = IR1_CHECK;
 
 void setup() {
-  // Set up IR beam pins as inputs
   pinMode(IR1, INPUT_PULLUP);
   pinMode(IR2_Left, INPUT_PULLUP);
   pinMode(IR2_Right, INPUT_PULLUP);
@@ -98,16 +92,13 @@ void setup() {
   pinMode(IR4_Left, INPUT_PULLUP);
   pinMode(IR4_Right, INPUT_PULLUP);
 
-  // Set up light pins as outputs
   pinMode(LED_Left, OUTPUT);
   pinMode(LED_Right, OUTPUT);
 
-  // Set up solenoid pins as outputs
   pinMode(Doors, OUTPUT);
   pinMode(Licker_Left, OUTPUT);
   pinMode(Licker_Right, OUTPUT);
 
-  // Set up speaker pins as outputs
   pinMode(Speaker_Left, OUTPUT);
   pinMode(Speaker_Right, OUTPUT);
 
@@ -182,7 +173,6 @@ void writeToSD(String key, String value, bool createNewFile = false) {
 void loop() {
   switch (currentIRState) {
     case IR1_CHECK:
-      // Check state of IR1
       if (digitalRead(IR1) == LOW) {
         trialNumber++;
         Serial.println("\nTrial: " + String(trialNumber) + "\nSession: " + String(sessionNumber));
@@ -200,7 +190,7 @@ void loop() {
         } else {
 
           trialStartTime = millis();
-          writeToSD("IR1", "");  // Log data for IR1
+          writeToSD("IR1", "");
           digitalWrite(LED_Left, HIGH);
           digitalWrite(LED_Right, HIGH);
           currentIRState = IR2_CHECK;
@@ -210,22 +200,19 @@ void loop() {
 
     case IR2_CHECK:
       if (digitalRead(IR2_Left) == LOW) {
-        writeToSD("IR2_Left", "");  // Log data for IR2_LEFT
-        // Generate a random number between 0 and 3
+        writeToSD("IR2_Left", "");
         int randomNumber = random(4);
-        // Choose tone based on the random number
         if (randomNumber == 3) {
-          tone(Speaker_Left, A, TONE_DURATION);  // Play tone A
+          tone(Speaker_Left, A, TONE_DURATION);
         } else {
-          tone(Speaker_Left, B, TONE_DURATION);  // Play tone B
+          tone(Speaker_Left, B, TONE_DURATION);
         }
-        writeToSD("Tone " + (randomNumber == 3 ? String("A, 7000 Hz,") : String("B, 10000 Hz,") + " Left Speaker"), "");
+        writeToSD("Speaker_Left", (randomNumber == 3 ? String(A) : String(B)));
         unsigned long toneStartTime = millis();
-        while (millis() - toneStartTime < TONE_DURATION) {
-          // Allow the tone to play for TONE_DURATION (5 seconds)
+        while (millis() - toneStartTime < TONE_DURATION) { //Plays tone for 5 seconds before any other action occurs
         }
         if (randomNumber == 3 && millis() - toneStartTime >= TONE_DURATION) {
-          pinMode(Licker_Left, HIGH);  // Activate Licker_Left after 5 seconds of tone A
+          pinMode(Licker_Left, HIGH);
           writeToSD("Licker_Left", "");
         }
         digitalWrite(Doors, HIGH);
@@ -233,24 +220,21 @@ void loop() {
         currentIRState = IR3_CHECK;
       }
       if (digitalRead(IR2_Right) == LOW) {
-        writeToSD("IR2_Right", "");  // Log data for IR2_RIGHT
-        // Generate a random number between 0 and 1
+        writeToSD("IR2_Right", "");
         int randomNumber = random(2);
-        // Choose tone based on the random number
         if (randomNumber == 1) {
-          tone(Speaker_Right, C, TONE_DURATION);  // Play tone C
+          tone(Speaker_Right, C, TONE_DURATION);
         } else {
-          tone(Speaker_Right, D, TONE_DURATION);  // Play tone D
+          tone(Speaker_Right, D, TONE_DURATION);
         }
-        writeToSD("Tone " + (randomNumber == 1 ? String("C, 8000 Hz,") : String("D, 12000 Hz,") + " Right Speker"), "");
+        writeToSD("Speaker_Right", (randomNumber == 1 ? String(C) : String(D)));
         unsigned long toneStartTime = millis();
-        while (millis() - toneStartTime < TONE_DURATION) {
-          // Allow the tone to play for TONE_DURATION (5 seconds)
+        while (millis() - toneStartTime < TONE_DURATION) { //Plays tone for 5 seconds before any other action occurs
         }
         int randomNumber2 = random(4);
         // Deliver reward based on random number
         if (randomNumber2 == 3) {
-          pinMode(Licker_Right, HIGH);  // Activate Licker_Right if the random number is 3
+          pinMode(Licker_Right, HIGH);
           writeToSD("Licker_Right", "");
         }
         digitalWrite(Doors, HIGH);
@@ -288,13 +272,6 @@ void loop() {
       matrix.loadFrame(frame_heart);
       delay(500);
       delay(2000);
-      /*while (1) {
-        // wait for something/button/user input/etc.
-        matrix.loadFrame(frame_full);
-        delay(500);
-        matrix.loadFrame(frame_heart);
-        delay(500);
-      }*/
       sessionNumber++;
       trialNumber = 0;  // Reset the trial number for the new session
       currentIRState = IR1_CHECK;
