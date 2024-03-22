@@ -1,3 +1,4 @@
+// A = "Left" side, B = "Right" side
 //Define Variables
 // Using Arduino Uno, total of 15 variables as well as SPI (Four pins)
 //add tone freq in statement
@@ -34,28 +35,28 @@ const uint32_t frame_full[] = {
 
 // IR beam variables
 int IR1 = A0;
-int IR2_Left = A1;
-int IR2_Right = A2;
-int IR3_Left = A3;
-int IR3_Right = A4;
-int IR4_Left = A5;
-int IR4_Right = 2;
+int IR2_A = A1;
+int IR2_B = A2;
+int IR3_A = A3;
+int IR3_B = A4;
+int IR4_A = A5;
+int IR4_B = 2;
 
 // Light variables
-int LED_Left = 3;
-int LED_Right = 4;
+int LED_A = 3;
+int LED_B = 4;
 
 // Solenoid variables
 // Lickers use I2C
 // Made both doors the same pin since we were out of pins
 // Transmitters are always powered
 int Doors = 7;
-int Licker_Left = 8;
-int Licker_Right = 9;
+int Licker_A = 8;
+int Licker_B = 9;
 
 // Speaker variables
-int Speaker_Left = 5;
-int Speaker_Right = 6;
+int Speaker_A = 5;
+int Speaker_B = 6;
 
 bool finishIR3;  // special case for tone/IR3 logging
 
@@ -98,25 +99,25 @@ IRStates currentIRState = IR1_CHECK;
 void setup() {
   // Set up IR beam pins as inputs
   pinMode(IR1, INPUT_PULLUP);
-  pinMode(IR2_Left, INPUT_PULLUP);
-  pinMode(IR2_Right, INPUT_PULLUP);
-  pinMode(IR3_Left, INPUT_PULLUP);
-  pinMode(IR3_Right, INPUT_PULLUP);
-  pinMode(IR4_Left, INPUT_PULLUP);
-  pinMode(IR4_Right, INPUT_PULLUP);
+  pinMode(IR2_A, INPUT_PULLUP);
+  pinMode(IR2_B, INPUT_PULLUP);
+  pinMode(IR3_A, INPUT_PULLUP);
+  pinMode(IR3_B, INPUT_PULLUP);
+  pinMode(IR4_A, INPUT_PULLUP);
+  pinMode(IR4_B, INPUT_PULLUP);
 
   // Set up light pins as outputs
-  pinMode(LED_Left, OUTPUT);
-  pinMode(LED_Right, OUTPUT);
+  pinMode(LED_A, OUTPUT);
+  pinMode(LED_B, OUTPUT);
 
   // Set up solenoid pins as outputs
   pinMode(Doors, OUTPUT);
-  pinMode(Licker_Left, OUTPUT);
-  pinMode(Licker_Right, OUTPUT);
+  pinMode(Licker_A, OUTPUT);
+  pinMode(Licker_B, OUTPUT);
 
   // Set up speaker pins as outputs
-  pinMode(Speaker_Left, OUTPUT);
-  pinMode(Speaker_Right, OUTPUT);
+  pinMode(Speaker_A, OUTPUT);
+  pinMode(Speaker_B, OUTPUT);
 
   // Arduino R4 LED matrix
   matrix.begin();
@@ -133,6 +134,26 @@ void setup() {
     }
   }
 
+  // Serial.println("looping sensors...");
+  // while(1) {
+  //   Serial.print("IR1: ");
+  //   Serial.println(digitalRead(A0));
+  //   Serial.print("IR2A: ");
+  //   Serial.println(digitalRead(A1));
+  //   Serial.print("IR2B: ");
+  //   Serial.println(digitalRead(A2));
+  //   Serial.print("IR3A: ");
+  //   Serial.println(digitalRead(A3));
+  //   Serial.print("IR3B: ");
+  //   Serial.println(digitalRead(A4));
+  //   Serial.print("IR4A: ");
+  //   Serial.println(digitalRead(A5));
+  //   Serial.print("IR4B: ");
+  //   Serial.println(digitalRead(2));
+  //   Serial.println("");
+  //   delay(500);
+  // }
+
   if (!SD.begin(chipSelect)) {
     Serial.println("SD card initialization failed. Check your connections.");
     while (1)
@@ -143,10 +164,10 @@ void setup() {
   Wire.begin();  // I2C RTC
   // Wire.setClock(25000); // slow it down
   delay(500);
-  if(checkAndUpdateCompileID()) {
-    updateRTC();
-    rtc.setClockMode(false);  // set to 24h
-  }
+  // if(checkAndUpdateCompileID()) {
+    // updateRTC();
+    // rtc.setClockMode(false);  // set to 24h
+  // }
   showTime();
 
   matrix.loadFrame(frame_empty);
@@ -212,47 +233,47 @@ void loop() {
 
           trialStartTime = millis();
           writeToSD("IR1", "");  // Log data for IR1
-          digitalWrite(LED_Left, HIGH);
-          digitalWrite(LED_Right, HIGH);
+          digitalWrite(LED_A, HIGH);
+          digitalWrite(LED_B, HIGH);
           currentIRState = IR2_CHECK;
         }
       }
       break;
 
     case IR2_CHECK:
-      if (digitalRead(IR2_Left) == LOW) {
-        writeToSD("IR2_Left", "");
+      if (digitalRead(IR2_A) == LOW) {
+        writeToSD("IR2_A", "");
         int randomNumber = random(4);  // random int 0-3
         if (randomNumber == 3) {
-          tone(Speaker_Left, A, TONE_DURATION);  // Play tone A
-          writeToSD("Tone_Left", String(A));
+          tone(Speaker_A, A, TONE_DURATION);  // Play tone A
+          writeToSD("Tone_A", String(A));
         } else {
-          tone(Speaker_Left, B, TONE_DURATION);  // Play tone B
-          writeToSD("Tone_Left", String(B));
+          tone(Speaker_A, B, TONE_DURATION);  // Play tone B
+          writeToSD("Tone_A", String(B));
         }
         unsigned long toneStartTime = millis();
         while (millis() - toneStartTime < TONE_DURATION) {
           // Allow the tone to play for TONE_DURATION (5 seconds)
         }
         if (randomNumber == 3 && millis() - toneStartTime >= TONE_DURATION) {
-          pinMode(Licker_Left, HIGH);  // Activate Licker_Left after 5 seconds of tone A
-          writeToSD("Licker_Left", "");
+          pinMode(Licker_A, HIGH);  // Activate Licker_A after 5 seconds of tone A
+          writeToSD("Licker_A", "");
         }
         toneStartTime = millis();
         finishIR3 = false;  // reset
         currentIRState = IR3_CHECK;
       }
-      if (digitalRead(IR2_Right) == LOW) {
-        writeToSD("IR2_Right", "");  // Log data for IR2_RIGHT
+      if (digitalRead(IR2_B) == LOW) {
+        writeToSD("IR2_B", "");  // Log data for IR2_B
         // Generate a random number between 0 and 1
         int randomNumber = random(2);
         // Choose tone based on the random number
         if (randomNumber == 1) {
-          tone(Speaker_Right, C, TONE_DURATION);  // Play tone C
-          writeToSD("Tone_Left", String(C));
+          tone(Speaker_B, C, TONE_DURATION);  // Play tone C
+          writeToSD("Tone_A", String(C));
         } else {
-          tone(Speaker_Right, D, TONE_DURATION);  // Play tone D
-          writeToSD("Tone_Left", String(D));
+          tone(Speaker_B, D, TONE_DURATION);  // Play tone D
+          writeToSD("Tone_A", String(D));
         }
         toneStartTime = millis();
         finishIR3 = false;  // reset
@@ -263,12 +284,12 @@ void loop() {
     case IR3_CHECK:
       // time between IR2-3 is critical, no blocking
       // !finishIR3 && ensures IR3 is only logged once
-      if (!finishIR3 && digitalRead(IR3_Left) == LOW) {
-        writeToSD("IR3_Left", "");
+      if (!finishIR3 && digitalRead(IR3_A) == LOW) {
+        writeToSD("IR3_A", "");
         finishIR3 = true;
       }
-      if (!finishIR3 && digitalRead(IR3_Right) == LOW) {
-        writeToSD("IR3_Right", "");
+      if (!finishIR3 && digitalRead(IR3_B) == LOW) {
+        writeToSD("IR3_B", "");
         finishIR3 = true;
       }
 
@@ -277,8 +298,8 @@ void loop() {
         int randomNumber2 = random(4);
         // Deliver reward based on random number
         if (randomNumber2 == 3) {
-          pinMode(Licker_Right, HIGH);  // Activate Licker_Right if the random number is 3
-          writeToSD("Licker_Right", "");
+          pinMode(Licker_B, HIGH);  // Activate Licker_B if the random number is 3
+          writeToSD("Licker_B", "");
         }
         digitalWrite(Doors, HIGH);
         writeToSD("Doors Open", "");
@@ -287,12 +308,12 @@ void loop() {
       break;
 
     case IR4_CHECK:
-      if (digitalRead(IR4_Left) == LOW) {
-        writeToSD("IR4_Left", "");
+      if (digitalRead(IR4_A) == LOW) {
+        writeToSD("IR4_A", "");
         currentIRState = IR1_CHECK;
       }
-      if (digitalRead(IR4_Right) == LOW) {
-        writeToSD("IR4_Right", "");
+      if (digitalRead(IR4_B) == LOW) {
+        writeToSD("IR4_B", "");
         currentIRState = IR1_CHECK;
       }
       break;
@@ -354,6 +375,8 @@ void updateRTC() {
 }
 
 String getTime() {
+  return "TEST";
+
   bool h12, PM_time;
   byte second, minute, hour;
   unsigned long startMillis = millis();
@@ -377,6 +400,8 @@ String getTime() {
 }
 
 String getDate() {
+  return "TEST";
+
   bool h12, PM_time, Century;
   byte year = 255, month = 255, day = 255;
   unsigned long startMillis = millis();
@@ -407,6 +432,9 @@ void showTime() {
   byte second, minute, hour, day, month, year;
   unsigned long startMillis = millis();
   unsigned long timeout = 5000;  // 5 seconds timeout
+
+  Serial.println("DATETIME OFFLINE");
+  return;
 
   // Try to get valid date and time within timeout
   do {
