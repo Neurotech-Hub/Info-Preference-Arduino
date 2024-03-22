@@ -259,8 +259,6 @@ void loop() {
           pinMode(Licker_A, HIGH);  // Activate Licker_A after 5 seconds of tone A
           writeToSD("Licker_A", "");
         }
-        toneStartTime = millis();
-        finishIR3 = false;  // reset
         currentIRState = IR3_CHECK;
       }
       if (digitalRead(IR2_B) == LOW) {
@@ -275,9 +273,12 @@ void loop() {
           tone(Speaker_B, D, TONE_DURATION);  // Play tone D
           writeToSD("Tone_A", String(D));
         }
+        currentIRState = IR3_CHECK;
+      }
+      // exiting
+      if (currentIRState == IR3_CHECK) {
         toneStartTime = millis();
         finishIR3 = false;  // reset
-        currentIRState = IR3_CHECK;
       }
       break;
 
